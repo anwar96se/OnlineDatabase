@@ -1,43 +1,22 @@
 package se.anwar.online_database;
 
+import android.content.Context;
 import android.util.Log;
 
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Scanner;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 class Utils {
 
-    private static final String TAG = SQLiteOnlineHelper.class.getSimpleName();
-
-    public static List<String> splitSqlScript(String script, char delim) {
-        List<String> statements = new ArrayList<>();
-        StringBuilder sb = new StringBuilder();
-        boolean inLiteral = false;
-        char[] content = script.toCharArray();
-        for (int i = 0; i < script.length(); i++) {
-            if (content[i] == '"') {
-                inLiteral = !inLiteral;
-            }
-            if (content[i] == delim && !inLiteral) {
-                if (sb.length() > 0) {
-                    statements.add(sb.toString().trim());
-                    sb = new StringBuilder();
-                }
-            } else {
-                sb.append(content[i]);
-            }
-        }
-        if (sb.length() > 0) {
-            statements.add(sb.toString().trim());
-        }
-        return statements;
-    }
+    private static final String TAG = "Utils_Log";
+    private static final String VERSIONS_FILE = "version.txt";
 
     public static void writeExtractedFileToDisk(InputStream in, OutputStream outs) throws IOException {
         byte[] buffer = new byte[1024];
@@ -60,8 +39,42 @@ class Utils {
         return null;
     }
 
-    public static String convertStreamToString(InputStream is) {
-        return new Scanner(is).useDelimiter("\\A").next();
+    public static void setDatabaseVersion(Context context, int version) {
+        File cacheDir = new File(context.getApplicationInfo().dataDir + "/cache");
+        if (!cacheDir.exists()) cacheDir.mkdir();
+        File file = new File(cacheDir, VERSIONS_FILE);
+        try {
+            BufferedWriter writer = new BufferedWriter(new FileWriter(file, false));
+            writer.write(version + "");
+            writer.flush();
+            writer.close();
+        } catch (IOException e) {
+            Log.e(TAG, "setDatabaseVersion: ", e);
+        }
+
     }
 
+    public static int getDatabaseVersion(Context context) {
+        String path = context.getApplicationInfo().dataDir + "/cache/" + VERSIONS_FILE;
+        try {
+            File file = new File(path);
+            String line = new Scanner(file).useDelimiter("\\A").next();
+            return Integer.parseInt(line);
+        } catch (Exception e) {
+            Log.w(TAG, "getDatabaseVersion: ", e);
+            return 0;
+        }
+    }
+
+    public static void deleteDatabaseFiles(Context context, String path) {
+        try {
+            String version = context.getApplicationInfo().dataDir + "/cache/" + VERSIONS_FILE;
+            new File(version).delete();
+            new File(path).delete();
+            new File(path + ".zip").delete();
+            new File(path + ".gz").delete();
+        } catch (Exception e) {
+            Log.w(TAG, "deleteDatabaseFiles: failed delete old files", e);
+        }
+    }
 }

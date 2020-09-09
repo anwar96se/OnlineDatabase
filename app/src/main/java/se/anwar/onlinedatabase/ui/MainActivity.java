@@ -57,8 +57,8 @@ public class MainActivity extends AppCompatActivity implements SQLiteOnlineHelpe
 
     private void downloadData() {
         DBManager dbManager = DBManager.getInstance(this);
-        if (!dbManager.isDatabaseDownloaded())
-            dbManager.downloadDatabase(this, fileURL, this);
+        if (dbManager.shouldDownloadDatabase())
+            dbManager.downloadDatabase(fileURL, this);
         else
             showBooks();
     }

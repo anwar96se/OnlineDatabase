@@ -13,9 +13,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.zip.ZipInputStream;
@@ -23,7 +20,7 @@ import java.util.zip.ZipInputStream;
 public class SQLiteOnlineHelper extends SQLiteOpenHelper {
 
     //region Constants
-    private static final String TAG = SQLiteOnlineHelper.class.getSimpleName();
+    private static final String TAG = "SQLiteOnline_Log";
     private static final int BUFFER_SIZE = 4096;
     private static final String ASSET_DB_PATH = "databases";
     //endregion
@@ -37,7 +34,6 @@ public class SQLiteOnlineHelper extends SQLiteOpenHelper {
     private SQLiteDatabase mDatabase = null;
     private boolean mIsInitializing = false;
     private String mDatabasePath;
-    private String mUpgradePathFormat;
     private int mForcedUpgradeVersion = 0;
     //endregion
 
@@ -75,7 +71,6 @@ public class SQLiteOnlineHelper extends SQLiteOpenHelper {
         } else {
             mDatabasePath = context.getApplicationInfo().dataDir + "/databases";
         }
-        mUpgradePathFormat = ASSET_DB_PATH + "/" + name + "_upgrade_%s-%s.sql";
     }
 
     /**
@@ -258,38 +253,6 @@ public class SQLiteOnlineHelper extends SQLiteOpenHelper {
 
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
-
-        Log.w(TAG, "Upgrading database " + mName + " from version " + oldVersion + " to " + newVersion + "...");
-
-        ArrayList<String> paths = new ArrayList<>();
-        getUpgradeFilePaths(oldVersion, newVersion - 1, newVersion, paths);
-
-        if (paths.isEmpty()) {
-            Log.e(TAG, "no upgrade script path from " + oldVersion + " to " + newVersion);
-            throw new SQLiteOnlineException("no upgrade script path from " + oldVersion + " to " + newVersion);
-        }
-
-        Collections.sort(paths, new VersionComparator());
-        for (String path : paths) {
-            try {
-                Log.w(TAG, "processing upgrade: " + path);
-                InputStream is = new FileInputStream(path);
-                String sql = Utils.convertStreamToString(is);
-                if (sql != null) {
-                    List<String> cmds = Utils.splitSqlScript(sql, ';');
-                    for (String cmd : cmds) {
-                        //Log.d(TAG, "cmd=" + cmd);
-                        if (cmd.trim().length() > 0) {
-                            db.execSQL(cmd);
-                        }
-                    }
-                }
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-
-        Log.w(TAG, "Successfully upgraded database " + mName + " from version " + oldVersion + " to " + newVersion);
     }
 
     @Override
@@ -299,26 +262,6 @@ public class SQLiteOnlineHelper extends SQLiteOpenHelper {
     //endregion
 
     //region Copy & Upgrade database
-
-    /**
-     * Bypass the upgrade process (for each increment up to a given version) and simply
-     * overwrite the existing database with the supplied asset file.
-     *
-     * @param version bypass upgrade up to this version number - should never be greater than the
-     *                latest database version.
-     */
-    public void setForcedUpgrade(int version) {
-        mForcedUpgradeVersion = version;
-    }
-
-    /**
-     * Bypass the upgrade process for every version increment and simply overwrite the existing
-     * database with the supplied asset file.
-     */
-    public void setForcedUpgrade() {
-        setForcedUpgrade(mNewVersion);
-    }
-
     private SQLiteDatabase createOrOpenDatabase(boolean force) throws SQLiteOnlineException {
 
         // test for the existence of the db file first and don't attempt open
@@ -382,7 +325,7 @@ public class SQLiteOnlineHelper extends SQLiteOpenHelper {
         try {
             File f = new File(mDatabasePath + "/");
             if (!f.exists()) {
-                f.mkdir();
+                Log.i(TAG, "copyDatabaseFromZip: " + f.mkdir());
             }
             if (isZip) {
                 ZipInputStream zis = Utils.getFileFromZip(is);
@@ -402,53 +345,28 @@ public class SQLiteOnlineHelper extends SQLiteOpenHelper {
             throw se;
         }
     }
-
-    private InputStream getUpgradeSQLStream(int oldVersion, int newVersion) {
-        String path = String.format(mUpgradePathFormat, oldVersion, newVersion);
-        try {
-            return new FileInputStream(path);
-        } catch (IOException e) {
-            Log.w(TAG, "missing database upgrade script: " + path);
-            return null;
-        }
-    }
-
-    private void getUpgradeFilePaths(int baseVersion, int start, int end, ArrayList<String> paths) {
-
-        int a;
-        int b;
-
-        InputStream is = getUpgradeSQLStream(start, end);
-        if (is != null) {
-            String path = String.format(mUpgradePathFormat, start, end);
-            paths.add(path);
-            //Log.d(TAG, "found script: " + path);
-            a = start - 1;
-            b = start;
-            is = null;
-        } else {
-            a = start - 1;
-            b = end;
-        }
-
-        if (a < baseVersion) {
-            return;
-        } else {
-            getUpgradeFilePaths(baseVersion, a, b, paths); // recursive call
-        }
-
-    }
     //endregion
 
     //region Download database
-    public boolean isDatabaseDownloaded() {
+    private boolean isDatabaseDownloaded() {
         String path = mDatabasePath + "/" + mName;
         return new File(path).exists()
                 || new File(path + ".zip").exists()
                 || new File(path + ".gz").exists();
     }
 
-    public void downloadDatabase(final Context context, final String fileURL,
+    public boolean shouldDownloadDatabase() {
+        int mDbVersion = Utils.getDatabaseVersion(mContext);
+        Utils.setDatabaseVersion(mContext, mNewVersion);
+        boolean shouldUpdate = mDbVersion < mNewVersion || !isDatabaseDownloaded();
+        if (shouldUpdate) {
+            String path = mDatabasePath + "/" + mName;
+            Utils.deleteDatabaseFiles(mContext, path);
+        }
+        return shouldUpdate;
+    }
+
+    public void downloadDatabase(final String fileURL,
                                  final OnFileDownloadListener listener) {
         if (listener != null)
             listener.OnStart();
@@ -457,7 +375,7 @@ public class SQLiteOnlineHelper extends SQLiteOpenHelper {
             @Override
             public void run() {
                 try {
-                    downloadFile(context, fileURL, listener);
+                    downloadFile(fileURL, listener);
                 } catch (IOException e) {
                     Log.e(TAG, "downloadDatabase:  Error ->  ", e);
                 } finally {
@@ -468,7 +386,7 @@ public class SQLiteOnlineHelper extends SQLiteOpenHelper {
         });
     }
 
-    private void downloadFile(Context context, String fileURL, OnFileDownloadListener listener)
+    private void downloadFile(String fileURL, OnFileDownloadListener listener)
             throws IOException {
         URL url = new URL(fileURL);
         HttpURLConnection httpConn = (HttpURLConnection) url.openConnection();

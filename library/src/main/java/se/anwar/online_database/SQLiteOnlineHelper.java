@@ -358,12 +358,12 @@ public class SQLiteOnlineHelper extends SQLiteOpenHelper {
 
     public boolean shouldDownloadDatabase() {
         int mDbVersion = Utils.getDatabaseVersion(mContext);
-        Utils.setDatabaseVersion(mContext, mNewVersion);
         boolean shouldUpdate = mDbVersion < mNewVersion || !isDatabaseDownloaded();
         if (shouldUpdate) {
             String path = mDatabasePath + "/" + mName;
             Utils.deleteDatabaseFiles(mContext, path);
         }
+        Utils.setDatabaseVersion(mContext, mNewVersion);
         return shouldUpdate;
     }
 

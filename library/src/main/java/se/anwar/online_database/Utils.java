@@ -68,8 +68,6 @@ class Utils {
 
     public static void deleteDatabaseFiles(Context context, String path) {
         try {
-            String version = context.getApplicationInfo().dataDir + "/cache/" + VERSIONS_FILE;
-            new File(version).delete();
             new File(path).delete();
             new File(path + ".zip").delete();
             new File(path + ".gz").delete();

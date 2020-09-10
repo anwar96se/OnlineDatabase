@@ -66,7 +66,7 @@ class Utils {
         }
     }
 
-    public static void deleteDatabaseFiles(Context context, String path) {
+    public static void deleteDatabaseFiles(String path) {
         try {
             new File(path).delete();
             new File(path + ".zip").delete();

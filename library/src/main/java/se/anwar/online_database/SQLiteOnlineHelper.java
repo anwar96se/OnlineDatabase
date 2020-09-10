@@ -361,7 +361,7 @@ public class SQLiteOnlineHelper extends SQLiteOpenHelper {
         boolean shouldUpdate = mDbVersion < mNewVersion || !isDatabaseDownloaded();
         if (shouldUpdate) {
             String path = mDatabasePath + "/" + mName;
-            Utils.deleteDatabaseFiles(mContext, path);
+            Utils.deleteDatabaseFiles(path);
         }
         Utils.setDatabaseVersion(mContext, mNewVersion);
         return shouldUpdate;
@@ -457,6 +457,8 @@ public class SQLiteOnlineHelper extends SQLiteOpenHelper {
             Log.i(TAG, "No file to download. Server replied HTTP code: " + responseCode);
         }
         httpConn.disconnect();
+
+        copyDatabaseFromZip();
         if (listener != null)
             ((Activity) mContext).runOnUiThread(new Runnable() {
                 @Override

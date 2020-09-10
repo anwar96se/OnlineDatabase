@@ -368,8 +368,6 @@ public class SQLiteOnlineHelper extends SQLiteOpenHelper {
 
     public void downloadDatabase(final String fileURL,
                                  final OnFileDownloadListener listener) {
-        if (listener != null)
-            listener.OnStart();
         ExecutorService exec = Executors.newCachedThreadPool();
         exec.submit(new Runnable() {
             @Override
@@ -378,9 +376,6 @@ public class SQLiteOnlineHelper extends SQLiteOpenHelper {
                     downloadFile(fileURL, listener);
                 } catch (IOException e) {
                     Log.e(TAG, "downloadDatabase:  Error ->  ", e);
-                } finally {
-                    if (listener != null)
-                        listener.onComplete();
                 }
             }
         });
@@ -388,6 +383,8 @@ public class SQLiteOnlineHelper extends SQLiteOpenHelper {
 
     private void downloadFile(String fileURL, OnFileDownloadListener listener)
             throws IOException {
+        if (listener != null)
+            listener.OnStart();
         URL url = new URL(fileURL);
         HttpURLConnection httpConn = (HttpURLConnection) url.openConnection();
         int responseCode = httpConn.getResponseCode();
@@ -448,6 +445,8 @@ public class SQLiteOnlineHelper extends SQLiteOpenHelper {
             Log.i(TAG, "No file to download. Server replied HTTP code: " + responseCode);
         }
         httpConn.disconnect();
+        if (listener != null)
+            listener.onComplete();
     }
 
     public interface OnFileDownloadListener {

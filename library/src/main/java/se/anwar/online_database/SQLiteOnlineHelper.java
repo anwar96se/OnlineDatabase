@@ -1,5 +1,6 @@
 package se.anwar.online_database;
 
+import android.app.Activity;
 import android.content.Context;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteException;
@@ -381,10 +382,15 @@ public class SQLiteOnlineHelper extends SQLiteOpenHelper {
         });
     }
 
-    private void downloadFile(String fileURL, OnFileDownloadListener listener)
+    private void downloadFile(String fileURL, final OnFileDownloadListener listener)
             throws IOException {
         if (listener != null)
-            listener.OnStart();
+            ((Activity) mContext).runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    listener.onDownloadStart();
+                }
+            });
         URL url = new URL(fileURL);
         HttpURLConnection httpConn = (HttpURLConnection) url.openConnection();
         int responseCode = httpConn.getResponseCode();
@@ -405,8 +411,7 @@ public class SQLiteOnlineHelper extends SQLiteOpenHelper {
                 }
             } else {
                 // extracts file name from URL
-                fileName = fileURL.substring(fileURL.lastIndexOf("/") + 1,
-                        fileURL.length());
+                fileName = fileURL.substring(fileURL.lastIndexOf("/") + 1);
             }
 
             Log.i(TAG, "Content-Type = " + contentType);
@@ -427,14 +432,21 @@ public class SQLiteOnlineHelper extends SQLiteOpenHelper {
 //            FileOutputStream outputStream = context.openFileOutput(fileName, Context.MODE_PRIVATE);
             FileOutputStream outputStream = new FileOutputStream(dbFile);
 
-            int bytesRead = -1;
+            int bytesRead;
             long total = 0;
             byte[] buffer = new byte[BUFFER_SIZE];
             while ((bytesRead = inputStream.read(buffer)) != -1) {
                 outputStream.write(buffer, 0, bytesRead);
                 total += bytesRead;
-                if (listener != null && contentLength > 0)
-                    listener.onProgress((int) (total * 100 / contentLength));
+                if (listener != null && contentLength > 0) {
+                    final int progress = (int) (total * 100 / contentLength);
+                    ((Activity) mContext).runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            listener.onDownloadProgress(progress);
+                        }
+                    });
+                }
             }
 
             outputStream.close();
@@ -446,15 +458,20 @@ public class SQLiteOnlineHelper extends SQLiteOpenHelper {
         }
         httpConn.disconnect();
         if (listener != null)
-            listener.onComplete();
+            ((Activity) mContext).runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    listener.onDownloadComplete();
+                }
+            });
     }
 
     public interface OnFileDownloadListener {
-        void OnStart();
+        void onDownloadStart();
 
-        void onProgress(int progress);
+        void onDownloadProgress(int progress);
 
-        void onComplete();
+        void onDownloadComplete();
     }
     //endregion
 

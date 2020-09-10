@@ -32,27 +32,22 @@ public class MainActivity extends AppCompatActivity implements SQLiteOnlineHelpe
     }
 
     @Override
-    public void OnStart() {
+    public void onDownloadStart() {
         seekBar.setVisibility(View.VISIBLE);
     }
 
     @Override
-    public void onProgress(int progress) {
+    public void onDownloadProgress(int progress) {
         seekBar.setProgress(progress);
         textProgress.setText(progress < 100 ? "Progress: " + progress + "%" : "Download Completed");
         Log.i(TAG, "onProgress: " + progress);
     }
 
     @Override
-    public void onComplete() {
-        runOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                Log.d(TAG, "onComplete: ");
-                seekBar.setVisibility(View.GONE);
-                showBooks();
-            }
-        });
+    public void onDownloadComplete() {
+        Log.d(TAG, "onComplete: ");
+        seekBar.setVisibility(View.GONE);
+        showBooks();
     }
 
     private void downloadData() {

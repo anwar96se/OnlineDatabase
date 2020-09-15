@@ -23,7 +23,6 @@ public class SQLiteOnlineHelper extends SQLiteOpenHelper {
     //region Constants
     private static final String TAG = "SQLiteOnline_Log";
     private static final int BUFFER_SIZE = 4096;
-    private static final String ASSET_DB_PATH = "databases";
     //endregion
 
     //region Variables
@@ -35,7 +34,6 @@ public class SQLiteOnlineHelper extends SQLiteOpenHelper {
     private SQLiteDatabase mDatabase = null;
     private boolean mIsInitializing = false;
     private String mDatabasePath;
-    private int mForcedUpgradeVersion = 0;
     //endregion
 
     //region Constructor
@@ -125,7 +123,7 @@ public class SQLiteOnlineHelper extends SQLiteOpenHelper {
             int version = db.getVersion();
 
             // do force upgrade
-            if (version != 0 && version < mForcedUpgradeVersion) {
+            if (version < 0) {
                 db = createOrOpenDatabase(true);
                 db.setVersion(mNewVersion);
                 version = db.getVersion();
@@ -302,7 +300,7 @@ public class SQLiteOnlineHelper extends SQLiteOpenHelper {
     }
 
     private void copyDatabaseFromZip() throws SQLiteOnlineException {
-        Log.w(TAG, "copying database from assets...");
+        Log.d(TAG, "copying database from assets...");
 
         String path = mDatabasePath + "/" + mName;
         String dest = mDatabasePath + "/" + mName;
@@ -326,7 +324,7 @@ public class SQLiteOnlineHelper extends SQLiteOpenHelper {
         try {
             File f = new File(mDatabasePath + "/");
             if (!f.exists()) {
-                Log.i(TAG, "copyDatabaseFromZip: " + f.mkdir());
+                Log.i(TAG, "copyDatabaseFromZip: mkdir " + f.mkdir());
             }
             if (isZip) {
                 ZipInputStream zis = Utils.getFileFromZip(is);
@@ -338,7 +336,7 @@ public class SQLiteOnlineHelper extends SQLiteOpenHelper {
                 Utils.writeExtractedFileToDisk(is, new FileOutputStream(dest));
             }
 
-            Log.w(TAG, "database copy complete");
+            Log.d(TAG, "database copy complete");
 
         } catch (IOException e) {
             SQLiteOnlineException se = new SQLiteOnlineException("Unable to write " + dest + " to data directory");
@@ -373,99 +371,137 @@ public class SQLiteOnlineHelper extends SQLiteOpenHelper {
         exec.submit(new Runnable() {
             @Override
             public void run() {
-                try {
-                    downloadFile(fileURL, listener);
-                } catch (IOException e) {
-                    Log.e(TAG, "downloadDatabase:  Error ->  ", e);
-                }
+                downloadFile(fileURL, listener);
             }
         });
     }
 
-    private void downloadFile(String fileURL, final OnFileDownloadListener listener)
-            throws IOException {
-        if (listener != null)
-            ((Activity) mContext).runOnUiThread(new Runnable() {
-                @Override
-                public void run() {
-                    listener.onDownloadStart();
+    private void downloadFile(String fileURL, final OnFileDownloadListener listener) {
+        onStart(listener);
+        HttpURLConnection httpConn = null;
+        try {
+            URL url = new URL(fileURL);
+            httpConn = (HttpURLConnection) url.openConnection();
+            int responseCode = httpConn.getResponseCode();
+
+            String fileName = "";
+            // always check HTTP response code first
+            if (responseCode == HttpURLConnection.HTTP_OK) {
+                String disposition = httpConn.getHeaderField("Content-Disposition");
+                String contentType = httpConn.getContentType();
+                int contentLength = httpConn.getContentLength();
+
+                if (disposition != null) {
+                    // extracts file name from header field
+                    int index = disposition.indexOf("filename=");
+                    if (index > 0) {
+                        fileName = disposition.substring(index + 10,
+                                disposition.length() - 1);
+                    }
+                } else {
+                    // extracts file name from URL
+                    fileName = fileURL.substring(fileURL.lastIndexOf("/") + 1);
                 }
-            });
-        URL url = new URL(fileURL);
-        HttpURLConnection httpConn = (HttpURLConnection) url.openConnection();
-        int responseCode = httpConn.getResponseCode();
 
-        String fileName = "";
-        // always check HTTP response code first
-        if (responseCode == HttpURLConnection.HTTP_OK) {
-            String disposition = httpConn.getHeaderField("Content-Disposition");
-            String contentType = httpConn.getContentType();
-            int contentLength = httpConn.getContentLength();
+                Log.i(TAG, "Content-Type = " + contentType);
+                Log.i(TAG, "Content-Disposition = " + disposition);
+                Log.i(TAG, "Content-Length = " + contentLength);
+                Log.i(TAG, "fileName = " + fileName);
 
-            if (disposition != null) {
-                // extracts file name from header field
-                int index = disposition.indexOf("filename=");
-                if (index > 0) {
-                    fileName = disposition.substring(index + 10,
-                            disposition.length() - 1);
+                if (contentLength < 0) {
+                    throw new SQLiteOnlineException
+                            ("No file to download. Server replied HTTP code: " + responseCode);
                 }
-            } else {
-                // extracts file name from URL
-                fileName = fileURL.substring(fileURL.lastIndexOf("/") + 1);
-            }
 
-            Log.i(TAG, "Content-Type = " + contentType);
-            Log.i(TAG, "Content-Disposition = " + disposition);
-            Log.i(TAG, "Content-Length = " + contentLength);
-            Log.i(TAG, "fileName = " + fileName);
+                // opens input stream from the HTTP connection
+                InputStream inputStream = httpConn.getInputStream();
 
-            // opens input stream from the HTTP connection
-            InputStream inputStream = httpConn.getInputStream();
+                // opens an output stream to save into file
+                File dir = new File(mDatabasePath + "/");
+                if (!dir.exists()) {
+                    boolean mkdir = dir.mkdir();
+                    Log.i(TAG, "downloadFile: " + mkdir);
+                }
+                File dbFile = new File(dir, fileName);
+//                FileOutputStream outputStream = context.openFileOutput(fileName, Context.MODE_PRIVATE);
+                FileOutputStream outputStream = new FileOutputStream(dbFile);
 
-            // opens an output stream to save into file
-            File dir = new File(mDatabasePath + "/");
-            if (!dir.exists()) {
-                boolean mkdir = dir.mkdir();
-                Log.i(TAG, "downloadFile: " + mkdir);
-            }
-            File dbFile = new File(dir, fileName);
-//            FileOutputStream outputStream = context.openFileOutput(fileName, Context.MODE_PRIVATE);
-            FileOutputStream outputStream = new FileOutputStream(dbFile);
-
-            int bytesRead;
-            long total = 0;
-            byte[] buffer = new byte[BUFFER_SIZE];
-            while ((bytesRead = inputStream.read(buffer)) != -1) {
-                outputStream.write(buffer, 0, bytesRead);
-                total += bytesRead;
-                if (listener != null && contentLength > 0) {
+                int bytesRead;
+                long total = 0;
+                byte[] buffer = new byte[BUFFER_SIZE];
+                while ((bytesRead = inputStream.read(buffer)) != -1) {
+                    outputStream.write(buffer, 0, bytesRead);
+                    total += bytesRead;
                     final int progress = (int) (total * 100 / contentLength);
-                    ((Activity) mContext).runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-                            listener.onDownloadProgress(progress);
-                        }
-                    });
+                    onProgress(listener, progress);
                 }
+
+                outputStream.close();
+                inputStream.close();
+
+                Log.i(TAG, "File downloaded");
+                copyDatabaseFromZip();
+                onSuccess(listener);
+            } else {
+                throw new SQLiteOnlineException
+                        ("No file to download. Server replied HTTP code: " + responseCode);
             }
 
-            outputStream.close();
-            inputStream.close();
-
-            Log.i(TAG, "File downloaded");
-        } else {
-            Log.i(TAG, "No file to download. Server replied HTTP code: " + responseCode);
+        } catch (final Exception e) {
+            onFailed(listener, e);
+        } finally {
+            if (httpConn != null)
+                httpConn.disconnect();
         }
-        httpConn.disconnect();
+    }
+    //endregion
 
-        copyDatabaseFromZip();
-        if (listener != null)
-            ((Activity) mContext).runOnUiThread(new Runnable() {
-                @Override
-                public void run() {
-                    listener.onDownloadComplete();
-                }
-            });
+    //region DownloadListener
+    private void runOnUiThread(Runnable runnable) {
+        ((Activity) mContext).runOnUiThread(runnable);
+    }
+
+    private void onStart(final OnFileDownloadListener listener) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                if (listener != null)
+                    listener.onDownloadStart();
+            }
+        });
+    }
+
+    private void onProgress(final OnFileDownloadListener listener, final int progress) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                if (listener != null)
+                    listener.onDownloadProgress(progress);
+            }
+        });
+    }
+
+    private void onFailed(final OnFileDownloadListener listener, final Exception e) {
+        Log.w(TAG, "downloadFile: Failed", e);
+        String path = mDatabasePath + "/" + mName;
+        Utils.deleteDatabaseFiles(path);
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                if (listener != null)
+                    listener.onDownloadFailed(e);
+            }
+        });
+    }
+
+    private void onSuccess(final OnFileDownloadListener listener) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                if (listener != null)
+                    listener.onDownloadSuccess();
+            }
+        });
     }
 
     public interface OnFileDownloadListener {
@@ -473,7 +509,9 @@ public class SQLiteOnlineHelper extends SQLiteOpenHelper {
 
         void onDownloadProgress(int progress);
 
-        void onDownloadComplete();
+        void onDownloadFailed(Exception e);
+
+        void onDownloadSuccess();
     }
     //endregion
 
@@ -484,9 +522,6 @@ public class SQLiteOnlineHelper extends SQLiteOpenHelper {
      */
     @SuppressWarnings("serial")
     public static class SQLiteOnlineException extends SQLiteException {
-
-        public SQLiteOnlineException() {
-        }
 
         public SQLiteOnlineException(String error) {
             super(error);

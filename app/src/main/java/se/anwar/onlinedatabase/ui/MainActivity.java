@@ -6,6 +6,7 @@ import android.util.Log;
 import android.view.View;
 import android.widget.SeekBar;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 
@@ -17,8 +18,8 @@ public class MainActivity extends AppCompatActivity implements SQLiteOnlineHelpe
 
 
     private static final String TAG = "MainActivity_Log";
-    private static final String fileURL =
-            "http://download1590.mediafire.com/nn44a3ic8ywg/pl5svsjl678dsp5/books.db.zip";
+    private static final String FILE_URL =
+            "http://download1489.mediafire.com/unnooaxvlwtg/cj8dihw60zoa8q6/books.db.zip";
     private SeekBar seekBar;
     private TextView textProgress;
 
@@ -44,7 +45,15 @@ public class MainActivity extends AppCompatActivity implements SQLiteOnlineHelpe
     }
 
     @Override
-    public void onDownloadComplete() {
+    public void onDownloadFailed(Exception e) {
+        seekBar.setVisibility(View.GONE);
+//        showBooks();
+        Toast.makeText(this, e.getLocalizedMessage(), Toast.LENGTH_SHORT).show();
+        textProgress.setText(e.getLocalizedMessage());
+    }
+
+    @Override
+    public void onDownloadSuccess() {
         Log.d(TAG, "onComplete: ");
         seekBar.setVisibility(View.GONE);
         showBooks();
@@ -53,7 +62,7 @@ public class MainActivity extends AppCompatActivity implements SQLiteOnlineHelpe
     private void downloadData() {
         DBManager dbManager = DBManager.getInstance(this);
         if (dbManager.shouldDownloadDatabase())
-            dbManager.downloadDatabase(fileURL, this);
+            dbManager.downloadDatabase(FILE_URL, this);
         else
             showBooks();
     }

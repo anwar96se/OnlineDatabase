@@ -5,6 +5,7 @@ import android.content.Context;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteException;
 import android.database.sqlite.SQLiteOpenHelper;
+import android.os.Build;
 import android.util.Log;
 
 import java.io.File;
@@ -18,11 +19,13 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.zip.ZipInputStream;
 
+import javax.net.ssl.HttpsURLConnection;
+
 public class SQLiteOnlineHelper extends SQLiteOpenHelper {
 
     //region Constants
     private static final String TAG = "SQLiteOnline_Log";
-    private static final int BUFFER_SIZE = 4096;
+    private static final int BUFFER_SIZE = 1024;
     //endregion
 
     //region Variables
@@ -378,18 +381,21 @@ public class SQLiteOnlineHelper extends SQLiteOpenHelper {
 
     private void downloadFile(String fileURL, final OnFileDownloadListener listener) {
         onStart(listener);
-        HttpURLConnection httpConn = null;
+        HttpsURLConnection httpConnection = null;
         try {
             URL url = new URL(fileURL);
-            httpConn = (HttpURLConnection) url.openConnection();
-            int responseCode = httpConn.getResponseCode();
+            httpConnection = (HttpsURLConnection) url.openConnection();
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP)
+                httpConnection.setSSLSocketFactory(new TLSSocketFactory());
+            httpConnection.addRequestProperty("Accept-Encoding", "identity");
+            int responseCode = httpConnection.getResponseCode();
 
             String fileName = "";
             // always check HTTP response code first
             if (responseCode == HttpURLConnection.HTTP_OK) {
-                String disposition = httpConn.getHeaderField("Content-Disposition");
-                String contentType = httpConn.getContentType();
-                int contentLength = httpConn.getContentLength();
+                String disposition = httpConnection.getHeaderField("Content-Disposition");
+                String contentType = httpConnection.getContentType();
+                int contentLength = httpConnection.getContentLength();
 
                 if (disposition != null) {
                     // extracts file name from header field
@@ -414,7 +420,7 @@ public class SQLiteOnlineHelper extends SQLiteOpenHelper {
                 }
 
                 // opens input stream from the HTTP connection
-                InputStream inputStream = httpConn.getInputStream();
+                InputStream inputStream = httpConnection.getInputStream();
 
                 // opens an output stream to save into file
                 File dir = new File(mDatabasePath + "/");
@@ -450,8 +456,8 @@ public class SQLiteOnlineHelper extends SQLiteOpenHelper {
         } catch (final Exception e) {
             onFailed(listener, e);
         } finally {
-            if (httpConn != null)
-                httpConn.disconnect();
+            if (httpConnection != null)
+                httpConnection.disconnect();
         }
     }
     //endregion

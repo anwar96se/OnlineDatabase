@@ -19,8 +19,7 @@ public class MainActivity extends AppCompatActivity implements SQLiteOnlineHelpe
 
     private static final String TAG = "MainActivity_Log";
     private static final String FILE_URL =
-//            "http://download1489.mediafire.com/unnooaxvlwtg/cj8dihw60zoa8q6/books.db.zip";
-            "https://wahibdev.website/anis_almuslim/anis_almuslim.db.zip";
+            "http://download1489.mediafire.com/rcqfw3zqj1mg/cj8dihw60zoa8q6/books.db.zip";
     private SeekBar seekBar;
     private TextView textProgress;
 
